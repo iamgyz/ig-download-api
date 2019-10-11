@@ -1,4 +1,6 @@
 # Quick IG download micro service
+[![Build Status](https://travis-ci.org/iamgyz/ig-download-api.svg?branch=master)](https://travis-ci.org/iamgyz/ig-download-api)
+
 A simple serverless function host on now.sh
 
 # Usage
