@@ -1,0 +1,5 @@
+{
+    "version": 2,
+    "name": "ig-download",
+    "builds": [{ "src": "index.js", "use": "@now/node" }]
+}
