@@ -1,31 +1,21 @@
 const fetch = require("node-fetch");
 const { JSDOM } = require("jsdom");
-const URL = require("url").URL;
+const url = require("url");
 
 async function handleQuery(url, need_all) {
-  try {
-    const headers = {
-      "User-Agent":
-        "Mozilla/5.0 (iPhone; CPU iPhone OS 8_0 like Mac OS X) AppleWebKit/600.1.3 (KHTML, like Gecko) Version/8.0 Mobile/12A4345d Safari/600.1.4"
-    };
-    const res = await fetch(url, { method: "GET", headers: headers });
-    const html = await res.text();
-    //console.log(html);
-    const json = html2json(html, need_all);
-    return json;
-  } catch (e) {
-    throw e;
-  }
+  const headers = {
+    "User-Agent":
+      "Mozilla/5.0 (iPhone; CPU iPhone OS 8_0 like Mac OS X) AppleWebKit/600.1.3 (KHTML, like Gecko) Version/8.0 Mobile/12A4345d Safari/600.1.4"
+  };
+  const res = await fetch(url, { method: "GET", headers: headers });
+  const html = await res.text();
+  const json = html2json(html, need_all);
+  return json;
 }
 
-function validateURL(url) {
-  try {
-    _u = new URL(url);
-    if (_u.hostname.indexOf("instagram.com") != -1) return true;
-    else return false;
-  } catch (err) {
-    return false;
-  }
+function validateURL(_url) {
+  const { hostname } = url.parse(_url);
+  return hostname && hostname.includes("instagram.com");
 }
 
 async function lambda(url, need_all) {
@@ -41,7 +31,7 @@ async function lambda(url, need_all) {
       result.data = data;
     } else {
       result.status = "err";
-      result.msg = "No response from server";
+      result.msg = "No response from server, maybe private";
     }
   } else {
     result.msg = "invalid url";
@@ -53,59 +43,58 @@ async function lambda(url, need_all) {
 function html2json(html, need_all) {
   let results = [];
   const dom = new JSDOM(html);
-  let scripts = dom.window.document.getElementsByTagName("script");
+  /*
+    1. dom.window.document.getElementsByTagName return NodeList (Not array)
+    2. need to convert to array
+    Solution:
+      1. Array.from(xxx)
+      2. [...xxx] //Destructing
+  */
+  let scripts = [...dom.window.document.getElementsByTagName("script")];
   try {
-    for (let i = 0; i < scripts.length; i++) {
-      if (
-        scripts[i].textContent &&
-        scripts[i].textContent.indexOf("window._sharedData") != -1
-      ) {
-        let script = scripts[i].textContent;
-        let start = script.indexOf("=") + 1;
-        let len = script.lastIndexOf(";") - start;
-        json = JSON.parse(script.substr(start, len));
-        //check if multiple
-        if (
-          json.entry_data.PostPage[0].graphql.shortcode_media
-            .edge_sidecar_to_children &&
-          json.entry_data.PostPage[0].graphql.shortcode_media
-            .edge_sidecar_to_children.edges &&
-          json.entry_data.PostPage[0].graphql.shortcode_media
-            .edge_sidecar_to_children.edges.length > 0
-        ) {
-          let edges =
-            json.entry_data.PostPage[0].graphql.shortcode_media
-              .edge_sidecar_to_children.edges;
-          for (let j = 0; j < edges.length; j++) {
-            if (need_all) {
-              results.push(edges[j].node.display_resources);
-            }
-            //assume last element is highest resolution
-            else {
-              results.push(
-                edges[j].node.display_resources[
-                  edges[j].node.display_resources.length - 1
-                ]
-              );
-            }
-          }
-        } else {
-          if (need_all) {
-            results.push(
-              json.entry_data.PostPage[0].graphql.shortcode_media
-                .display_resources
-            );
-          }
-          //assume last element is highest resolution
-          else {
-            results.push(
-              json.entry_data.PostPage[0].graphql.shortcode_media
-                .display_resources[json.entry_data.PostPage[0].graphql.shortcode_media
-                .display_resources.length-1]
-            );
-          }
-        }
-        break;
+    const script = scripts
+      .map(item => {
+        const { textContent = "" } = item;
+        return textContent;
+      })
+      .filter(textContext => {
+        return textContext.includes("window._sharedData");
+      })[0];
+    let start = script.indexOf("=") + 1;
+    let len = script.lastIndexOf(";") - start;
+    json = JSON.parse(script.substr(start, len));
+    //check if multiple
+    const { shortcode_media } = json.entry_data.PostPage[0].graphql;
+    const { edge_sidecar_to_children } = shortcode_media;
+    if (
+      edge_sidecar_to_children &&
+      edge_sidecar_to_children.edges &&
+      edge_sidecar_to_children.edges.length
+    ) {
+      let edges = edge_sidecar_to_children.edges;
+      if (need_all) {
+        results = edges.map(item => item.node.display_resources);
+      }
+      //assume last element is highest resolution
+      else {
+        results = edges.map(
+          item =>
+            item.node.display_resources[item.node.display_resources.length - 1]
+        );
+      }
+    }
+    //else, not multiple
+    else {
+      if (need_all) {
+        results = [shortcode_media.display_resources];
+      }
+      //assume last element is highest resolution
+      else {
+        results = [
+          shortcode_media.display_resources[
+            shortcode_media.display_resources.length - 1
+          ]
+        ];
       }
     }
   } catch (e) {
@@ -115,25 +104,25 @@ function html2json(html, need_all) {
 }
 
 module.exports = async (req, res) => {
+  const { all, url } = req.query;
+  const options = {
+    need_all: Number(all) === 1
+  };
   // Set CORS headers for now.sh
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Request-Method", "*");
   res.setHeader("Access-Control-Allow-Methods", "OPTIONS, GET");
   res.setHeader("Access-Control-Allow-Headers", "*");
-  if (req.query.url) {
-    try {
-      let data = []
-      if (req.query.all && Number(req.query.all) == 1) {
-        data = await lambda(req.query.url, true);
-      } else {
-        data = await lambda(req.query.url, false);
-      }
-      res.status(200).send(data);
-    } catch (e) {
-      res.status(400).send(e);
-    }
-  } else {
+  if (!url) {
     res.status(400).send({});
+    return;
+  }
+  try {
+    let data = await lambda(url, options.need_all);
+    res.status(200).send(data);
+  } catch (e) {
+    console.log(e);
+    res.status(400).send({ e });
   }
 };
 
