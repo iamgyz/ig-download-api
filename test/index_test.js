@@ -106,8 +106,9 @@ describe("Normal case1: single pic with no all=1", () => {
     await target(req, res);
     expect(res.statusCode, 200);
     expect(res.payload.status, "ok");
-    expect(res.payload.data.length, 1);
-    expect(Array.isArray(res.payload.data[0]), false);
+    expect(res.payload.response.is_video, false);
+    expect(res.payload.response.data.length, 1);
+    expect(Array.isArray(res.payload.response.data[0]), false);
   }).timeout(30000);
 });
 
@@ -134,8 +135,9 @@ describe("Normal case2: multi pic with no all=1", () => {
     await target(req, res);
     expect(res.statusCode, 200);
     expect(res.payload.status, "ok");
-    expect(res.payload.data.length, 5);
-    expect(Array.isArray(res.payload.data[0]), false);
+    expect(res.payload.response.is_video, false);
+    expect(res.payload.response.data.length, 5);
+    expect(Array.isArray(res.payload.response.data[0]), false);
   }).timeout(30000);
 });
 
@@ -163,9 +165,10 @@ describe("Normal case3: single pic with all=1", () => {
     await target(req, res);
     expect(res.statusCode, 200);
     expect(res.payload.status, "ok");
-    expect(res.payload.data.length, 1);
-    expect(Array.isArray(res.payload.data[0]), true);
-    expect(res.payload.data[0].length, 3);
+    expect(res.payload.response.is_video, false);
+    expect(res.payload.response.data.length, 1);
+    expect(Array.isArray(res.payload.response.data[0]), true);
+    expect(res.payload.response.data[0].length, 3);
   }).timeout(30000);
 });
 
@@ -193,8 +196,38 @@ describe("Normal case4: multi pic with all=1", () => {
     await target(req, res);
     expect(res.statusCode, 200);
     expect(res.payload.status, "ok");
-    expect(res.payload.data.length, 5);
-    expect(Array.isArray(res.payload.data[0]), true);
-    expect(res.payload.data[0].length, 3);
+    expect(res.payload.response.is_video, false);
+    expect(res.payload.response.data.length, 5);
+    expect(Array.isArray(res.payload.response.data[0]), true);
+    expect(res.payload.response.data[0].length, 3);
+  }).timeout(30000);
+});
+
+describe("Normal case5: video", () => {
+  it("TestCase1", async () => {
+    let req = {
+      query: {
+        url: "https://www.instagram.com/p/B3fBsJQgMKQ/"
+      }
+    };
+    let res = {
+      payload: null,
+      statusCode: 0,
+      setHeader: () => {},
+      send(data) {
+        this.payload = data;
+        return this;
+      },
+      status(s) {
+        this.statusCode = s;
+        return this;
+      }
+    };
+    await target(req, res);
+    expect(res.statusCode, 200);
+    expect(res.payload.status, "ok");
+    expect(res.payload.response.is_video, true);
+    expect(res.payload.response.data.length, 1);
+    expect(Array.isArray(res.payload.response.data[0]), false);
   }).timeout(30000);
 });

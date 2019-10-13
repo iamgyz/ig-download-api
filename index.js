@@ -21,14 +21,17 @@ function validateURL(_url) {
 async function lambda(url, need_all) {
   let result = {
     status: "",
-    data: [],
+    response: [],
     msg: ""
   };
   if (validateURL(url)) {
-    let data = await handleQuery(url, need_all);
+    let [is_video, data] = await handleQuery(url, need_all);
     if (data.length > 0) {
       result.status = "ok";
-      result.data = data;
+      result.response = {
+        data,
+        is_video
+      };
     } else {
       result.status = "err";
       result.msg = "No response from server, maybe private";
@@ -42,6 +45,7 @@ async function lambda(url, need_all) {
 
 function html2json(html, need_all) {
   let results = [];
+  let is_video = false;
   const dom = new JSDOM(html);
   /*
     1. dom.window.document.getElementsByTagName return NodeList (Not array)
@@ -63,44 +67,57 @@ function html2json(html, need_all) {
     let start = script.indexOf("=") + 1;
     let len = script.lastIndexOf(";") - start;
     json = JSON.parse(script.substr(start, len));
-    //check if multiple
+
     const { shortcode_media } = json.entry_data.PostPage[0].graphql;
-    const { edge_sidecar_to_children } = shortcode_media;
-    if (
-      edge_sidecar_to_children &&
-      edge_sidecar_to_children.edges &&
-      edge_sidecar_to_children.edges.length
-    ) {
-      let edges = edge_sidecar_to_children.edges;
-      if (need_all) {
-        results = edges.map(item => item.node.display_resources);
+    //check if video
+    if (shortcode_media.is_video && shortcode_media.video_url) {
+      is_video = true;
+      results = [
+        {
+          src: shortcode_media.video_url
+        }
+      ];
+    } else {
+      //check if multiple
+      const { edge_sidecar_to_children } = shortcode_media;
+      if (
+        edge_sidecar_to_children &&
+        edge_sidecar_to_children.edges &&
+        edge_sidecar_to_children.edges.length
+      ) {
+        let edges = edge_sidecar_to_children.edges;
+        if (need_all) {
+          results = edges.map(item => item.node.display_resources);
+        }
+        //assume last element is highest resolution
+        else {
+          results = edges.map(
+            item =>
+              item.node.display_resources[
+                item.node.display_resources.length - 1
+              ]
+          );
+        }
       }
-      //assume last element is highest resolution
+      //else, not multiple
       else {
-        results = edges.map(
-          item =>
-            item.node.display_resources[item.node.display_resources.length - 1]
-        );
-      }
-    }
-    //else, not multiple
-    else {
-      if (need_all) {
-        results = [shortcode_media.display_resources];
-      }
-      //assume last element is highest resolution
-      else {
-        results = [
-          shortcode_media.display_resources[
-            shortcode_media.display_resources.length - 1
-          ]
-        ];
+        if (need_all) {
+          results = [shortcode_media.display_resources];
+        }
+        //assume last element is highest resolution
+        else {
+          results = [
+            shortcode_media.display_resources[
+              shortcode_media.display_resources.length - 1
+            ]
+          ];
+        }
       }
     }
   } catch (e) {
     console.log(e);
   }
-  return results;
+  return [is_video, results];
 }
 
 module.exports = async (req, res) => {
@@ -128,8 +145,10 @@ module.exports = async (req, res) => {
 
 /*
 (async function() {
-  //let url = "https://www.instagram.com/p/B3Z4FWLBZ_i/"; //single
-  let url = "https://www.instagram.com/p/B2znCG_gUt-/"; //multi
+  
+  //let url = "https://www.instagram.com/p/B3fBsJQgMKQ/"; //video
+  let url = "https://www.instagram.com/p/B3Z4FWLBZ_i/"; //single
+  //let url = "https://www.instagram.com/p/B2znCG_gUt-/"; //multi
   const a = await lambda(url, true);
   console.log(a);
 })();
