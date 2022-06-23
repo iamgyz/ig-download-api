@@ -9,7 +9,7 @@
     "test": "./node_modules/mocha/bin/mocha test/*.js"
   },
   "dependencies": {
-    "jsdom": "^15.1.1",
+    "jsdom": "^16.5.0",
     "node-fetch": "^1.6.1"
   },
   "devDependencies": {
